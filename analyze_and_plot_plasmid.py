@@ -1,3 +1,10 @@
+"""
+A pipeline that takes a circular DNA sequence (suspected plasmid) and analyze it using
+first Prodigal, to identify the ORFs, and then DIAMOND against Resfinder, ISfinder, mobileOG and NR.
+The annotated ORFs are then visualized using pycirclize. 
+The option shifted makes sure that the visualization starts at the start of one ORF.
+"""
+
 from read_fasta import read_fasta
 
 import subprocess as sp
@@ -9,14 +16,19 @@ from Bio.SeqFeature import SeqFeature, FeatureLocation
 from matplotlib.patches import Patch
 
 
+""" ----------- Local paths to databases ----------------- """
 isfinder_db = '/storage/shared/databases/isfinder/ISFinder.faa.dmnd'
 nr_db = '/storage/shared/databases/nr_DB/ncbi_protein_bacterial_c95.faa.dmnd'
 mobileOG_db = '/storage/fannyb/databases/mobileOG/man_cur/mobileOG_plasmid_build.dmnd'
 resfinder_db = '/storage/fannyb/databases/resfinder/2022_11/resfinder_inti1/pure_resfinder_plasmid_build.dmnd'
+""" ------------------------------------------------------ """
+
+""" ------------ Parameter settings ---------------------- """
 scov = 60
 base_cutoff = 60
 threads = 30
 shift = True
+""" ------------------------------------------------------ """
 
 def main():
     parser = argparse.ArgumentParser()
@@ -33,9 +45,10 @@ def main():
     prodigal_listfile = f'{outdir}/{basename}.prodigal'
 
     orf_info = {}
-    run_prodigal(infile,orffile,prodigal_listfile)
-    orf_info, seqlen = parse_prodigal(orffile, orf_info, prodigal_listfile)
+    run_prodigal(infile,orffile,prodigal_listfile) # Predict ORFs
+    orf_info, seqlen = parse_prodigal(orffile, orf_info, prodigal_listfile) # Find complete ORFs and get information about them (i.e. start,stop,strand and length)
 
+    # Shift the DNA sequence so that it starts at the first ORF
     if shift:
         new_fasta = f'{outdir}/{basename}_shifted.fasta'
         shift_len(orf_info, infile, new_fasta)
@@ -70,6 +83,10 @@ def plot_the_plasmid(orf_info, seqlen, basename, outfig):
     plotted = []
     text_pos = []
     labels = []
+    
+    """
+    Plot the results from the different databases
+    """
     for db, arrow_col in db_colors.items():
         cds_track, plotted, pos, names = plot_resfinder(orf_info, cds_track, db, arrow_col,plotted,text_inside)
         text_pos.extend(pos)
@@ -109,6 +126,9 @@ def plot_the_plasmid(orf_info, seqlen, basename, outfig):
     fig.savefig(outfig)
 
 def shift_len(orf_info, infile, outfile):
+    """
+    Shift the DNA sequence so that it starts where the first ORF starts
+    """
     fout = open(outfile,'w')
     starts = []
     for orf, info in orf_info.items():
@@ -123,6 +143,9 @@ def shift_len(orf_info, infile, outfile):
         fout.write(f'>{header}\n{end_seq}\n')
 
 def plot_resfinder(orf_info, cds_track,db,arrow_col,plotted,inside):
+    """
+    Plot the annotated ORFs from db
+    """
     cds_list = []
     hit = False
     pos_list, name_list = [], []
@@ -147,6 +170,9 @@ def plot_resfinder(orf_info, cds_track,db,arrow_col,plotted,inside):
     return cds_track, plotted, pos_list, name_list
 
 def parse_diamond(infile,cutoff,db,orf_info):
+    """
+    Parse the diamond output from alignment against DB
+    """
     orf_gene_info = {}
     with open(infile) as f:
         for line in f:
